@@ -15,7 +15,7 @@ var (
 
 func (s *IntegrationTestSuite) checkOutflowByPercentage(endpoint, excDenom string, outflow, amount, perDiff sdk.Dec) {
 	// get historic average price for denom (SYMBOL_DENOM)
-	histoAvgPrice, err := queryHistroAvgPrice(endpoint, excDenom)
+	histoAvgPrice, err := queryHistAvgPrice(endpoint, excDenom)
 	s.Require().NoError(err)
 	totalPrice := amount.Quo(powerReduction).Mul(histoAvgPrice)
 	s.T().Log("exchangeRate total price ", totalPrice.String(), "outflow value", outflow.String())
@@ -28,13 +28,12 @@ func (s *IntegrationTestSuite) checkOutflowByPercentage(endpoint, excDenom strin
 func (s *IntegrationTestSuite) checkOutflows(umeeAPIEndpoint, denom string, checkWithExcRate bool, amount sdk.Dec, excDenom string) {
 	s.Require().Eventually(
 		func() bool {
-			outflows, err := queryOutflows(umeeAPIEndpoint, denom)
+			a, err := queryOutflows(umeeAPIEndpoint, denom)
 			s.Require().NoError(err)
 			if checkWithExcRate {
-				outflow := outflows.AmountOf(denom)
-				s.checkOutflowByPercentage(umeeAPIEndpoint, excDenom, outflow, amount, sdk.MustNewDecFromStr("0.01"))
+				s.checkOutflowByPercentage(umeeAPIEndpoint, excDenom, a, amount, sdk.MustNewDecFromStr("0.01"))
 			}
-			return outflows.Len() == 1 && outflows[0].Denom == denom
+			return true
 		},
 		time.Minute,
 		5*time.Second,
@@ -73,7 +72,7 @@ func (s *IntegrationTestSuite) TestIBCTokenTransfer() {
 
 		// send uatom from gaia to umee
 		// Note : gaia -> umee (ibc_quota will not check token limit)
-		histoAvgPriceOfAtom, err := queryHistroAvgPrice(umeeAPIEndpoint, atomSymbol)
+		histoAvgPriceOfAtom, err := queryHistAvgPrice(umeeAPIEndpoint, atomSymbol)
 		s.Require().NoError(err)
 		emOfAtom := sdk.NewDecFromInt(totalQuota).Quo(histoAvgPriceOfAtom)
 		uatomAmount := sdk.NewInt64Coin("uatom", emOfAtom.Mul(powerReduction).RoundInt64())
@@ -81,7 +80,7 @@ func (s *IntegrationTestSuite) TestIBCTokenTransfer() {
 		s.checkSupply(umeeAPIEndpoint, uatomIBCHash, uatomAmount.Amount)
 
 		// sending more tokens than token_quota limit of umee (token_quota is 100$)
-		histoAvgPriceOfUmee, err := queryHistroAvgPrice(umeeAPIEndpoint, umeeSymbol)
+		histoAvgPriceOfUmee, err := queryHistAvgPrice(umeeAPIEndpoint, umeeSymbol)
 		s.Require().NoError(err)
 		exceedAmountOfUmee := sdk.NewDecFromInt(totalQuota).Quo(histoAvgPriceOfUmee)
 		s.T().Logf("sending %s amount %s more than %s", umeeSymbol, exceedAmountOfUmee.String(), totalQuota.String())
@@ -145,13 +144,13 @@ func (s *IntegrationTestSuite) TestIBCTokenTransfer() {
 		s.T().Logf("waiting until quota reset, basically it will take around 300 seconds to do quota reset")
 		s.Require().Eventually(
 			func() bool {
-				outflows, err := queryOutflows(umeeAPIEndpoint, appparams.BondDenom)
+				amount, err := queryOutflows(umeeAPIEndpoint, appparams.BondDenom)
 				s.Require().NoError(err)
-				outflow := outflows.AmountOf(appparams.BondDenom)
-				if outflow.Equal(sdk.NewDec(0)) {
-					s.T().Logf("quota is reset : %s is %s ", appparams.BondDenom, outflow.String())
+				if amount.IsZero() {
+					s.T().Logf("quota is reset : %s is 0", appparams.BondDenom)
+					return true
 				}
-				return outflow.Equal(sdk.NewDec(0))
+				return false
 			},
 			5*time.Minute,
 			5*time.Second,
