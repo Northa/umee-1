@@ -66,6 +66,7 @@ func NewOracleClient(
 	validatorAddrString string,
 	grpcEndpoint string,
 	gasAdjustment float64,
+	GasPrices string,
 ) (OracleClient, error) {
 	oracleAddr, err := sdk.AccAddressFromBech32(oracleAddrString)
 	if err != nil {
@@ -86,6 +87,7 @@ func NewOracleClient(
 		ValidatorAddrString: validatorAddrString,
 		Encoding:            umeeapp.MakeEncodingConfig(),
 		GasAdjustment:       gasAdjustment,
+		GasPrices:           GasPrices,
 		GRPCEndpoint:        grpcEndpoint,
 	}
 
@@ -267,6 +269,11 @@ func (oc OracleClient) CreateTxFactory() (tx.Factory, error) {
 	if err != nil {
 		return tx.Factory{}, err
 	}
+
+	oc.Logger.Info().
+			Str("gas_prices", oc.GasPrices).
+			Msg("GAS_PRICES")
+	
 
 	txFactory := tx.Factory{}.
 		WithAccountRetriever(clientCtx.AccountRetriever).
